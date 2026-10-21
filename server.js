@@ -179,5 +179,6 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': MIME[path.extname(f)] || 'application/octet-stream', 'Cache-Control': /\.(jpg|webp|png|geojson)$/.test(f) ? 'public, max-age=86400' : 'no-cache' }); res.end(d); });
   } catch (e) { json(res, 502, { error: e.message }); }
 });
+setTimeout(() => dtppIndex().catch(() => {}), 2000); // warm FAA d-TPP index so the first spotlight is instant
 server.listen(PORT, HOST, () => console.log(`SkyDeck Live Map → http://${HOST}:${PORT}`));
 module.exports = { parsePlan };

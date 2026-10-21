@@ -135,12 +135,13 @@ function drawRoute(){const g=$('route').getContext('2d');g.clearRect(0,0,W,H);if
  g.strokeStyle='#d4007a';g.lineWidth=W/600;g.stroke();
  g.font=`800 ${W/95}px Helvetica Neue,Arial`;planData.route.forEach((p,i)=>{const[x,y]=pts[i];const end=i==0||i==pts.length-1;g.fillStyle='#fff';g.strokeStyle='#d4007a';g.lineWidth=W/700;g.beginPath();g.arc(x,y,W/(end?260:420),0,7);g.fill();g.stroke();
   if(end){g.lineWidth=W/400;g.strokeStyle='#fff';g.strokeText(p.id,x+W/170,y-W/170);g.fillStyle='#111';g.fillText(p.id,x+W/170,y-W/170)}})}
-let VER=null;async function loadPlan(){try{const j=await(await fetch('/api/plan',{cache:'no-store'})).json();
+let VER=null;function prefetch(){if(planData)for(const a of[planData.dep.id,planData.dest.id])spotData(a).catch(()=>{})}
+async function loadPlan(){try{const j=await(await fetch('/api/plan',{cache:'no-store'})).json();
  if(VER&&j.version&&j.version!==VER){location.reload();return}VER=VER||j.version;// new deploy -> reload so TVs pick up new code
  let c=null;try{c=JSON.parse(localStorage.lmPlan||'null')}catch{}
  if(j.plan){planData=j.plan;localStorage.lmPlan=JSON.stringify({plan:j.plan,boot:j.boot})}
  else if(c&&c.boot!==j.boot&&c.plan.expires>Date.now())planData=c.plan;// server restarted (free plan wipes /tmp): keep showing the last plan
- else{planData=null;if(c&&c.boot===j.boot)localStorage.removeItem('lmPlan')}}catch{}const el=$('plan');
+ else{planData=null;if(c&&c.boot===j.boot)localStorage.removeItem('lmPlan')}prefetch()}catch{}const el=$('plan');
  if(planData){el.style.display='block';$('pRoute').textContent=planData.dep.id+' → '+planData.dest.id;$('pDep').textContent=fmtD(planData.etd);$('pEta').textContent=fmtD(planData.eta);
   $('pVia').textContent=planData.route.map(p=>p.id).join(' ');$('pDist').textContent=planData.distNm+' NM';}else el.style.display='none';drawRoute()}
 let lastOk=0;async function loadMetars(){try{const j=await(await fetch('/api/metars',{cache:'no-store'})).json();stations=j.stations;lastOk=Date.now();$('stale').style.display='none';drawLeds()}catch{}}
@@ -181,10 +182,10 @@ function initZoom(){const el=$('wrap');document.body.style.cursor='default';
   else if(pts.size===2){const[p,q]=[...pts.values()],d=Math.hypot(p[0]-q[0],p[1]-q[1]);if(last)zoomBy(d/last,((p[0]+q[0])/2-r.left)/r.width,((p[1]+q[1])/2-r.top)/r.height);last=d}});
  document.addEventListener('keydown',e=>{if(e.key==='+'||e.key==='='||e.keyCode===427)zoomBy(1.6);else if(e.key==='-'||e.keyCode===428)zoomBy(1/1.6);else if(e.key==='0'){userT=0;setView(full(),600)}});}
 // ---------- Airport Spotlight (only while a flight plan is loaded): map -> DEP -> map -> DEST, every ?cycle= s (default 10) ----------
-const CYC=Math.max(3,+(Q.get('cycle')||10))*1000,SP={},CATC={VFR:'#00a83a',MVFR:'#0a50ff',IFR:'#e00010',LIFR:'#c000c0'};let phase=0,cycT=null,spotOn=null;
+const CYC=Math.max(3,+(Q.get('cycle')||10))*1000,SP={},CATC={VFR:'#00a83a',MVFR:'#0a50ff',IFR:'#e00010',LIFR:'#c000c0'};let phase=0,cycT=null,spotOn=null,tok=0;
 function startCycle(){clearInterval(cycT);cycT=setInterval(cycStep,CYC)}
 function cycStep(){if(!planData){if(spotOn)hideSpot();phase=0;return}if(Date.now()-userT<30e3)return;// pause after manual zoom/pan
- phase=(phase+1)%4;if(phase===1)showSpot(planData.dep.id,'DEPARTURE');else if(phase===3)showSpot(planData.dest.id,'DESTINATION');else hideSpot()}
+ phase=(phase+1)%4;tok++;if(phase===1)showSpot(planData.dep.id,'DEPARTURE');else if(phase===3)showSpot(planData.dest.id,'DESTINATION');else hideSpot()}
 function hideSpot(){spotOn=null;$('radarBtn').style.visibility='';$('spot').classList.remove('on');$('dim').classList.remove('on');setView(full(),1400)}
 const esc=t=>String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 async function spotData(id){const s=SP[id];if(s&&Date.now()-s.t<120e3)return s.d;const d=await(await fetch('/api/spot?id='+id)).json();SP[id]={t:Date.now(),d,apd:s?.apd,aer:s?.aer};
@@ -201,8 +202,8 @@ function decode(m){if(!m)return null;const wind=m.wspd===0?'Calm':(m.wdir==='VRB
  const alt=m.altim?(m.altim*0.02953).toFixed(2)+' inHg':'—',cF=t=>t==null?'—':t.toFixed(0)+'°C';
  return{wind,vis,ceil:ceil?ceil.base.toLocaleString()+' ft '+ceil.cover:'None',sky,td:cF(m.temp)+' / '+cF(m.dewp),alt,wx:m.wxString||'',obs:new Date(m.obsTime*1000)}}
 function tafLines(t){if(!t)return'';return t.rawTAF.replace(/\s+(FM\d{6}|TEMPO|BECMG|PROB\d{2})/g,'\n$1').split('\n').slice(0,6).join('\n')}
-async function showSpot(id,role){let d;try{d=await spotData(id)}catch{return}if(!planData)return;spotOn=id;const s=SP[id],m=decode(d.metar),cat=d.metar?.fltCat||'';
- const apd=s.apd?await Promise.race([s.apd,new Promise(r=>setTimeout(()=>r(null),4000))]):null;if(spotOn!==id)return;
+async function showSpot(id,role){const my=tok;let d;try{d=await spotData(id)}catch{return}if(!planData||my!==tok)return;spotOn=id;const s=SP[id],m=decode(d.metar),cat=d.metar?.fltCat||'';
+ const apd=s.apd?await Promise.race([s.apd,new Promise(r=>setTimeout(()=>r(null),4000))]):null;if(spotOn!==id||my!==tok)return;
  const aerCap='Aerial imagery: USGS National Map (NAIP orthoimagery)';
  const aer=`<div class="img"><div class="lab2">Aerial View</div><div class="box"><img src="${s.aer.src}" style="width:100%;height:100%;object-fit:cover"></div><div class="cap">${aerCap}${apd?'':' · no FAA airport diagram published for '+esc(id)}</div></div>`;
  const imgs=apd?`<div class="img"><div class="lab2">FAA Airport Diagram</div><div class="box" style="background:#fff"><img src="${apd}"></div><div class="cap">FAA d-TPP cycle ${esc(d.apd.cycle)} · ${esc(d.apd.pdf)} · not for navigation</div></div>`:aer;
