@@ -15,8 +15,10 @@ with rasterio.open(src) as s:
     padx, pady = (x1-x0)*0.03, (y1-y0)*0.06
     x0 -= padx; x1 += padx; y0 -= pady*1.6; y1 += pady   # extra room at the bottom for the legend/plan cards
     cx, cy, w, h = (x0+x1)/2, (y0+y1)/2, x1-x0, y1-y0
-    if w/h < 16/9: w = h*16/9
-    else: h = w*9/16
+    b = s.bounds; m = (b.right-b.left)*0.012   # fill the TV edge-to-edge with the chart sheet (trim the collar)
+    sx0, sx1 = max(b.left+m, cx-h*16/9/2), min(b.right-m, cx+h*16/9/2)
+    cx, w = (sx0+sx1)/2, sx1-sx0; h = w*9/16
+    cy = max(min(cy, b.top-m-h/2), b.bottom+m+h/2)
     x0, x1, y0, y1 = cx-w/2, cx+w/2, cy-h/2, cy+h/2
     win = win_from_bounds(x0, y0, x1, y1, s.transform)
     bands = s.read(window=win, out_shape=(s.count, H, W), resampling=R.bilinear if s.count >= 3 else R.nearest, boundless=True, fill_value=0)
