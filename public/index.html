@@ -108,12 +108,25 @@ function drawLeds(){const g=$('leds').getContext('2d');g.clearRect(0,0,W,H);cons
   const gr=g.createRadialGradient(x,y,0,x,y,r*4.2);gr.addColorStop(0,c+'cc');gr.addColorStop(.35,c+'55');gr.addColorStop(1,c+'00');g.fillStyle=gr;g.beginPath();g.arc(x,y,r*4.2,0,7);g.fill();
   g.fillStyle=c;g.beginPath();g.arc(x,y,r*1.15,0,7);g.fill();g.fillStyle='rgba(255,255,255,.85)';g.beginPath();g.arc(x-r*.3,y-r*.3,r*.45,0,7);g.fill();}
  $('cnt').textContent=n+' stations'}
-function drawRadar(){const cv=$('radar'),g=cv.getContext('2d');g.clearRect(0,0,W,H);if(!radarOn||!radarImg||anim)return;
- const s=document.createElement('canvas');s.width=radarImg.width;s.height=radarImg.height;const sg=s.getContext('2d');sg.drawImage(radarImg,0,0);const sd=sg.getImageData(0,0,s.width,s.height).data;
- const sc=2,w=Math.ceil(W/sc),h=Math.ceil(H/sc),out=g.createImageData(w,h),o=out.data;// bbox -127,22,-64,52
- for(let j=0;j<h;j++){const y=V.y1-(j*sc/H)*(V.y1-V.y0);for(let i=0;i<w;i++){const x=V.x0+(i*sc/W)*(V.x1-V.x0);const[la,lo]=P.inv(x,y);const u=Math.floor((lo+127)/63*s.width),v=Math.floor((52-la)/30*s.height);if(u<0||v<0||u>=s.width||v>=s.height)continue;const k=(v*s.width+u)*4,q=(j*w+i)*4;if(sd[k+3]<10)continue;o[q]=sd[k];o[q+1]=sd[k+1];o[q+2]=sd[k+2];o[q+3]=Math.min(200,sd[k+3])}}
- const t=document.createElement('canvas');t.width=w;t.height=h;t.getContext('2d').putImageData(out,0,0);g.imageSmoothingEnabled=true;g.drawImage(t,0,0,W,H)}
-function loadRadar(){if(!radarOn)return;const im=new Image();im.onload=()=>{radarImg=im;radarT=new Date();$('rtime').textContent='Radar '+fmt(radarT);drawRadar()};im.src='/api/radar?t='+Date.now()}
+// Radar is reprojected ONCE into chart-frame space (RF = full CONUS, RHi = sharper crop for the zoomed view), then every frame
+// it is drawn with the same source->screen mapping as the chart, so it pans/zooms in lockstep (no per-frame reprojection, no pop).
+let RF=null,RHi=null,rhT=null;
+function reproj(img,bb,R,ow,oh){const s=document.createElement('canvas');s.width=img.width;s.height=img.height;const sg=s.getContext('2d');sg.drawImage(img,0,0);const sd=sg.getImageData(0,0,s.width,s.height).data;
+ const cv=document.createElement('canvas');cv.width=ow;cv.height=oh;const g=cv.getContext('2d'),out=g.createImageData(ow,oh),o=out.data,[w0,s0,e0,n0]=bb;
+ for(let j=0;j<oh;j++){const y=R.y1-(j+.5)/oh*(R.y1-R.y0);for(let i=0;i<ow;i++){const x=R.x0+(i+.5)/ow*(R.x1-R.x0);const[la,lo]=P.inv(x,y);const u=Math.floor((lo-w0)/(e0-w0)*s.width),v=Math.floor((n0-la)/(n0-s0)*s.height);
+  if(u<0||v<0||u>=s.width||v>=s.height)continue;const k=(v*s.width+u)*4;if(sd[k+3]<10)continue;const q=(j*ow+i)*4;o[q]=sd[k];o[q+1]=sd[k+1];o[q+2]=sd[k+2];o[q+3]=Math.min(200,sd[k+3])}}
+ g.putImageData(out,0,0);return{cv,R,a:1}}
+function blit(g,L){const R=L.R,sx=W/(V.x1-V.x0),cw=L.cv.width/(R.x1-R.x0),ch=L.cv.height/(R.y1-R.y0);// draw region R of frame into current view
+ const x0=Math.max(V.x0,R.x0),x1=Math.min(V.x1,R.x1),y0=Math.max(V.y0,R.y0),y1=Math.min(V.y1,R.y1);if(x1<=x0||y1<=y0)return;
+ g.globalAlpha=L.a;g.drawImage(L.cv,(x0-R.x0)*cw,(R.y1-y1)*ch,(x1-x0)*cw,(y1-y0)*ch,(x0-V.x0)*sx,(V.y1-y1)*sx,(x1-x0)*sx,(y1-y0)*sx);g.globalAlpha=1}
+function drawRadar(){const g=$('radar').getContext('2d');g.clearRect(0,0,W,H);if(!radarOn||!RF)return;g.imageSmoothingEnabled=true;blit(g,RF);if(RHi&&RHi.a>0)blit(g,RHi)}
+function hiRadar(){clearTimeout(rhT);rhT=setTimeout(()=>{if(!radarOn||anim)return;const z=(P.c.xmax-P.c.xmin)/(V.x1-V.x0);if(z<2.5){RHi=null;drawRadar();return}
+ const pad=(V.x1-V.x0)*.15,R={x0:V.x0-pad,x1:V.x1+pad,y0:V.y0-pad,y1:V.y1+pad},cs=[[R.x0,R.y0],[R.x1,R.y0],[R.x0,R.y1],[R.x1,R.y1],[(R.x0+R.x1)/2,R.y1],[(R.x0+R.x1)/2,R.y0]].map(([x,y])=>P.inv(x,y));
+ const bb=[Math.min(...cs.map(c=>c[1])),Math.min(...cs.map(c=>c[0])),Math.max(...cs.map(c=>c[1])),Math.max(...cs.map(c=>c[0]))].map(v=>v.toFixed(2));
+ const im=new Image();im.onload=()=>{const ow=Math.min(1600,Math.round(W*1.3/ (DPR>1?1.5:1))),L=reproj(im,bb.map(Number),R,ow,Math.round(ow*(R.y1-R.y0)/(R.x1-R.x0)));L.a=0;RHi=L;const t0=performance.now();
+  const f=now=>{L.a=Math.min(1,(now-t0)/500);drawRadar();if(L.a<1&&RHi===L)requestAnimationFrame(f)};requestAnimationFrame(f)};
+ im.src=`/api/radar?bbox=${bb}&w=1600&t=${Math.floor(Date.now()/24e4)}`},500)}
+function loadRadar(){if(!radarOn)return;const im=new Image();im.onload=()=>{radarImg=im;radarT=new Date();$('rtime').textContent='Radar '+fmt(radarT);RF=reproj(im,[-127,22,-64,52],full(),2560,Math.round(2560*(P.c.ymax-P.c.ymin)/(P.c.xmax-P.c.xmin)));RHi=null;drawRadar();hiRadar()};im.src='/api/radar?t='+Date.now()}
 function setRadar(v){radarOn=v;localStorage.radar=v?'1':'0';$('radarBtn').textContent='RADAR '+(v?'ON':'OFF')+' (R)';$('radarBtn').classList.toggle('on',v);if(v&&!radarImg)loadRadar();if(!v)$('rtime').textContent='';drawRadar()}
 const fmt=(d,z)=>new Date(d).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/Chicago',timeZoneName:z===false?undefined:'short'});
 const fmtD=d=>new Date(d).toLocaleString('en-US',{weekday:'short',hour:'numeric',minute:'2-digit',timeZone:'America/Chicago',timeZoneName:'short'});
@@ -151,12 +164,12 @@ let tilesOK=false,anim=0,userT=0;
 function full(){const c=P.c;return{x0:c.xmin,x1:c.xmax,y0:c.ymin,y1:c.ymax}}
 function viewAt(lat,lon,z,fx=.5,fy=.5){const c=P.c,w=(c.xmax-c.xmin)/z,h=(c.ymax-c.ymin)/z,[x,y]=P.fwd(lat,lon);return clampV({x0:x-w*fx,x1:x+w*(1-fx),y1:y+h*fy,y0:y-h*(1-fy)})}
 function clampV(v){const c=P.c,w=Math.min(v.x1-v.x0,c.xmax-c.xmin),h=w*(c.ymax-c.ymin)/(c.xmax-c.xmin);let x0=Math.max(c.xmin,Math.min(v.x0,c.xmax-w)),y0=Math.max(c.ymin,Math.min(v.y0,c.ymax-h));return{x0,x1:x0+w,y0,y1:y0+h}}
-function redraw(){drawBase();drawRoute();drawLeds();if(!anim)drawRadar()}
+function redraw(){drawBase();drawRadar();drawRoute();drawLeds();if(!anim)hiRadar()}
 function setView(v,ms=0){v=clampV(v);cancelAnimationFrame(anim);if(!ms){anim=0;V=v;redraw();return}
  const a=V,t0=performance.now(),lg=k=>Math.log(a.x1-a.x0)+(Math.log(v.x1-v.x0)-Math.log(a.x1-a.x0))*k;
  const step=now=>{let k=Math.min(1,(now-t0)/ms);k=k<.5?2*k*k:1-(-2*k+2)**2/2;const w=Math.exp(lg(k)),h=w*(a.y1-a.y0)/(a.x1-a.x0);
   const cx=(a.x0+a.x1)/2+((v.x0+v.x1)/2-(a.x0+a.x1)/2)*k,cy=(a.y0+a.y1)/2+((v.y0+v.y1)/2-(a.y0+a.y1)/2)*k;
-  V={x0:cx-w/2,x1:cx+w/2,y0:cy-h/2,y1:cy+h/2};if(k<1){anim=requestAnimationFrame(step);drawBase();drawRoute();drawLeds()}else{anim=0;V=v;redraw()}};anim=requestAnimationFrame(step)}
+  V={x0:cx-w/2,x1:cx+w/2,y0:cy-h/2,y1:cy+h/2};if(k<1){anim=requestAnimationFrame(step);drawBase();drawRadar();drawRoute();drawLeds()}else{anim=0;V=v;redraw()}};anim=requestAnimationFrame(step)}
 function zoomBy(f,sx=.5,sy=.5){const w=V.x1-V.x0,h=V.y1-V.y0,mx=V.x0+w*sx,my=V.y1-h*sy,nw=Math.min(P.c.xmax-P.c.xmin,w/f),nh=nw*h/w;userT=Date.now();setView({x0:mx-nw*sx,x1:mx+nw*(1-sx),y1:my+nh*sy,y0:my-nh*(1-sy)})}
 function initZoom(){const el=$('wrap');document.body.style.cursor='default';
  el.addEventListener('wheel',e=>{e.preventDefault();const r=el.getBoundingClientRect();zoomBy(Math.exp(-e.deltaY*.0018),(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height)},{passive:false});
