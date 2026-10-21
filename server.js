@@ -102,6 +102,30 @@ async function parsePlan(text, now = Date.now()) {
   if (!eta) eta = etd + (ete || dist / tas * 36e5);
   return { dep: pts[0], dest: pts[pts.length - 1], route: pts, routeText: toks.join(' '), distNm: Math.round(dist), etd, eta, expires: eta + 45 * 6e4, received: now };
 }
+
+// ---------- Airport Spotlight: decoded METAR + TAF (aviationweather.gov), FAA d-TPP airport diagram, USGS aerial ----------
+async function getJ(url, ttl) { return cached(url, ttl, async () => { const r = await fetch(url, { headers: UA }); if (!r.ok) throw new Error(r.status + ' ' + url); const t = await r.text(); return t.trim() ? JSON.parse(t) : []; }); }
+async function dtppIndex() { // icao -> APD pdf, from the current FAA d-TPP metafile (cached 12 h)
+  return cached('dtpp', 432e5, async () => {
+    const info = await (await fetch('https://external-api.faa.gov/apra/dtpp/info?edition=current', { headers: { ...UA, Accept: 'application/json' } })).json();
+    const e = info.edition[0], cycle = e.editionDate.slice(-2) + String(e.editionNumber).padStart(2, '0');
+    const xml = await (await fetch(`https://aeronav.faa.gov/d-tpp/${cycle}/xml_data/d-tpp_Metafile.xml`, { headers: UA })).text();
+    const idx = {}; const re = /<airport_name [^>]*icao_ident="([A-Z0-9]*)"[^>]*>([\s\S]*?)<\/airport_name>/g; let m;
+    while ((m = re.exec(xml))) { const a = m[2].match(/<chart_code>APD<\/chart_code>\s*<chart_name>[^<]*<\/chart_name>[\s\S]*?<pdf_name>([^<]+)<\/pdf_name>/); if (m[1] && a) idx[m[1]] = a[1]; }
+    return { cycle, from: e.editionDate, idx };
+  });
+}
+async function spot(id) {
+  const [met, apt] = await Promise.all([getJ(`https://aviationweather.gov/api/data/metar?ids=${id}&format=json`, 120e3), getJ(`https://aviationweather.gov/api/data/airport?ids=${id}&format=json`, 864e5)]);
+  const a = apt[0] || {}, m = met[0] || null, lat = +(a.lat ?? m?.lat), lon = +(a.lon ?? m?.lon);
+  let taf = (await getJ(`https://aviationweather.gov/api/data/taf?ids=${id}&format=json`, 300e3))[0] || null, tafNear = false;
+  if (!taf && isFinite(lat)) { // no TAF at this field: use the nearest TAF within ~40 NM, clearly labelled
+    const near = await getJ(`https://aviationweather.gov/api/data/taf?bbox=${(lat - .7).toFixed(2)},${(lon - .8).toFixed(2)},${(lat + .7).toFixed(2)},${(lon + .8).toFixed(2)}&format=json`, 300e3);
+    let best = null; for (const t of near) { const d = hav({ lat, lon }, { lat: t.lat, lon: t.lon }); if (d < 40 && (!best || d < best.d)) best = { t, d }; }
+    if (best) { taf = best.t; tafNear = Math.round(best.d); } }
+  let apd = null; try { const d = await dtppIndex(); if (d.idx[id]) apd = { cycle: d.cycle, pdf: d.idx[id], url: `https://aeronav.faa.gov/d-tpp/${d.cycle}/${d.idx[id]}` }; } catch {}
+  return { id, name: a.name || m?.name || id, lat, lon, elev: a.elev ?? m?.elev, runways: a.runways || [], metar: m, taf, tafNear, apd };
+}
 let plan = null; try { plan = JSON.parse(fs.readFileSync(PLAN_FILE, 'utf8')); } catch {}
 function currentPlan() { if (plan && Date.now() > plan.expires) { plan = null; try { fs.unlinkSync(PLAN_FILE); } catch {} } return plan; }
 function savePlan(p) { plan = p; fs.writeFileSync(PLAN_FILE, JSON.stringify(p)); }
@@ -127,6 +151,15 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/radar') { // IEM NEXRAD n0q composite, EPSG:4326 over CONUS, proxied + cached 4 min
       const img = await cached('radar', 240e3, async () => { const r = await fetch('https://mesonet.agron.iastate.edu/cgi-bin/wms/nexrad/n0q.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1&LAYERS=nexrad-n0q-900913&STYLES=&SRS=EPSG:4326&BBOX=-127,22,-64,52&WIDTH=3150&HEIGHT=1500&FORMAT=image/png&TRANSPARENT=true', { headers: UA }); if (!r.ok) throw new Error('iem ' + r.status); return { b: Buffer.from(await r.arrayBuffer()), t: new Date().toISOString() }; });
       res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store', 'X-Radar-Time': img.t }); return res.end(img.b); }
+    if (p === '/api/spot') { const id = (u.searchParams.get('id') || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); return json(res, 200, await spot(id)); }
+    if (p === '/api/apd') { const id = (u.searchParams.get('id') || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); const d = await dtppIndex(); if (!d.idx[id]) return json(res, 404, { error: 'no FAA airport diagram' });
+      const b = await cached('apd' + id + d.cycle, 864e5, async () => { const r = await fetch(`https://aeronav.faa.gov/d-tpp/${d.cycle}/${d.idx[id]}`, { headers: UA }); if (!r.ok) throw new Error('dtpp ' + r.status); return Buffer.from(await r.arrayBuffer()); });
+      res.writeHead(200, { 'Content-Type': 'application/pdf', 'Cache-Control': 'public, max-age=86400' }); return res.end(b); }
+    if (p === '/api/aerial') { const la = +u.searchParams.get('lat'), lo = +u.searchParams.get('lon'), sp = Math.min(.1, Math.max(.005, +u.searchParams.get('span') || .025));
+      if (!isFinite(la) || !isFinite(lo)) return json(res, 400, {}); const dx = sp / Math.cos(la * Math.PI / 180) * 4 / 3;
+      const url = `https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/export?bbox=${lo - dx},${la - sp},${lo + dx},${la + sp}&bboxSR=4326&imageSR=3857&size=1600,1200&format=jpg&f=image`;
+      const b = await cached(url, 864e5, async () => { const r = await fetch(url, { headers: UA }); if (!r.ok) throw new Error('usgs ' + r.status); return Buffer.from(await r.arrayBuffer()); });
+      res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' }); return res.end(b); }
     if (p === '/api/plan' && req.method === 'GET') return json(res, 200, { plan: currentPlan() });
     if (p === '/api/plan' && req.method === 'DELETE') { if (KEY && u.searchParams.get('key') !== KEY) return json(res, 403, { error: 'bad key' }); plan = null; try { fs.unlinkSync(PLAN_FILE); } catch {} return json(res, 200, { ok: true }); }
     if ((p === '/api/plan' || p === '/api/inbound') && req.method === 'POST') {

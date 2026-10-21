@@ -3,11 +3,18 @@
  "lat2": 33,
  "lat0": 38,
  "lon0": -100,
- "xmin": -2131062.1846679733,
- "xmax": 2610537.2737488397,
- "ymin": -1310255.8820964654,
- "ymax": 1356893.8132629918,
+ "xmin": -2131062.18,
+ "xmax": 2610537.27,
+ "ymin": -1310255.88,
+ "ymax": 1356893.81,
  "w": 3840,
  "h": 2160,
- "crs": "PROJCS[\"Wall_Planning_Chart\",GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563,AUTHORITY[\"EPSG\",\"7030\"]],AUTHORITY[\"EPSG\",\"6326\"]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],AUTHORITY[\"EPSG\",\"4326\"]],PROJECTION[\"Lambert_Conformal_Conic_2SP\"],PARAMETER[\"latitude_of_origin\",38],PARAMETER[\"central_meridian\",-100],PARAMETER[\"standard_paralle"
+ "tile": 512,
+ "maxLevel": 4,
+ "tileExt": "webp",
+ "source": "FAA VFR Sectional Aeronautical Charts (GeoTIFF), aeronav.faa.gov",
+ "edition": "09-03-2026",
+ "sourceUrl": "https://aeronav.faa.gov/visual/09-03-2026/sectional-files/",
+ "nativeMetersPerPixel": 42.33,
+ "maxMetersPerPixel": 77.2
 }

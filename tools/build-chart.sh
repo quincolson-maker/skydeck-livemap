@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
-# Render build step: fetch FAA U.S. VFR Wall Planning Chart GeoTIFF (public domain) and warp it to the display projection.
-# Never fails the build; the page falls back to a plain state-line map if the chart is missing.
+# Render build step: fetch the pre-built FAA sectional tile pyramid (GitHub Release asset named in tools/chart-release.txt)
+# into public/tiles. Never fails the build: without tiles the page still shows public/chart.jpg (full view).
 set -u; cd "$(dirname "$0")/.."
-[ -s public/chart.jpg ] && grep -q crs public/chart.json && { echo "chart already present"; exit 0; }
-U=$(curl -s -m 20 "https://external-api.faa.gov/apra/vfr/wallplanning/chart?edition=current&format=tiff&geoname=US" -H "Accept: application/json" | grep -o '"url":"http[^"]*"' | head -1 | cut -d\" -f4)
-case "$U" in http*) ;; *) U="";; esac
-[ -n "$U" ] || U="https://web.archive.org/web/20260329031553id_/https://aeronav.faa.gov/visual/03-19-2026/Planning/US_WallPlan.zip"
-echo "chart source: $U"
-mkdir -p /tmp/wp && curl -sSL --retry 4 -m 600 -o /tmp/wp/wp.zip "$U" && (cd /tmp/wp && python3 -m zipfile -e wp.zip . ) && ls -la /tmp/wp || { echo "chart download failed"; exit 0; }
-python3 -m pip install -q rasterio numpy pillow 2>&1 | tail -2 || { echo "pip failed"; exit 0; }
-python3 tools/warp.py || echo "warp failed"
+[ -d public/tiles/4 ] && { echo "tiles already present"; exit 0; }
+U=$(tr -d ' \n' < tools/chart-release.txt)
+echo "tiles: $U"
+curl -sSL --retry 4 -m 900 "$U" | tar -x -C public && echo "tiles ok: $(find public/tiles -name '*.webp' | wc -l)" || echo "tile download failed (full-view chart.jpg still works)"
 exit 0

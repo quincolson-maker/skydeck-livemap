@@ -22,6 +22,30 @@ canvas{position:absolute;inset:0;width:100%;height:100%}
 #radarBtn.on{background:#1f6f2b;color:#fff}
 #radarBtn:focus{outline:.25vw solid #ffb300}
 #stale{color:#b00;font-weight:800;display:none}
+
+.card{z-index:3}#radarBtn{z-index:3}
+#dim{z-index:2;position:absolute;inset:0;background:rgba(10,14,22,.5);opacity:0;transition:opacity .8s;pointer-events:none}
+#dim.on{opacity:1}
+#spot{z-index:4;position:absolute;left:36.5%;right:1.5%;top:3%;bottom:3%;background:#fff;border:.14vw solid #111;box-shadow:0 .5vw 2vw rgba(0,0,0,.45);opacity:0;transform:translateX(3%) scale(.98);transition:opacity .7s,transform .7s;display:flex;flex-direction:column;padding:1.2vw 1.4vw;box-sizing:border-box;color:#111;pointer-events:none}
+#spot.on{opacity:1;transform:none}
+#spot .hd{display:flex;align-items:center;gap:1.2vw;border-bottom:.12vw solid #111;padding-bottom:.6vw;margin-bottom:.9vw}
+#spot .sid{font-size:3.6vw;font-weight:900;letter-spacing:.04em;line-height:1}
+#spot .snm{font-size:1.35vw;font-weight:700;line-height:1.2}
+#spot .ssub{font-size:.85vw;color:#444;letter-spacing:.1em;text-transform:uppercase;margin-top:.2vw}
+#spot .cat{margin-left:auto;font-size:2vw;font-weight:900;color:#fff;padding:.35vw 1.1vw;border-radius:.3vw;letter-spacing:.06em}
+#spot .bd{flex:1;display:flex;gap:1.2vw;min-height:0}
+#spot .wx{flex:0 0 46%;display:flex;flex-direction:column;gap:.5vw;min-width:0}
+#spot .kv{display:flex;justify-content:space-between;align-items:baseline;border-bottom:.06vw solid #ccc;padding:.2vw 0}
+#spot .k{font-size:.8vw;letter-spacing:.14em;color:#555;text-transform:uppercase;font-weight:700}
+#spot .v{font-size:1.55vw;font-weight:800;text-align:right}
+#spot .raw{font:600 .78vw/1.35 Menlo,Consolas,monospace;color:#222;background:#f3f3ef;padding:.4vw .5vw;border-left:.25vw solid #888;white-space:pre-wrap;word-break:break-word}
+#spot .lab2{font-size:.8vw;letter-spacing:.14em;color:#555;text-transform:uppercase;font-weight:800;margin-top:.3vw}
+#spot .img{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
+#spot .img .box{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;background:#f6f6f2;border:.08vw solid #999;overflow:hidden}
+#spot .wx .img{flex:1;min-height:6vw;margin-top:.3vw}
+#spot .img .box img,#spot .img .box canvas{max-width:100%;max-height:100%;object-fit:contain;display:block}
+#spot .cap{font-size:.72vw;color:#444;margin-top:.3vw;letter-spacing:.04em}
+#spot .phase{position:absolute;right:1.4vw;bottom:.6vw;font-size:.7vw;color:#666;letter-spacing:.1em}
 </style></head><body>
 <div id="stage"><div id="wrap">
 <canvas id="base"></canvas><canvas id="radar"></canvas><canvas id="route"></canvas><canvas id="leds"></canvas>
@@ -35,6 +59,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%}
 <div class="card" id="plan"><h3>Flight Plan</h3><div class="big" id="pRoute"></div>
 <div class="row" style="margin-top:.3vw"><div><div class="lab">Depart</div><div class="val" id="pDep"></div></div><div><div class="lab">Arrive (ETA)</div><div class="val" id="pEta"></div></div></div>
 <div class="row" style="margin-top:.2vw"><div><div class="lab">Route</div><div class="val" id="pVia" style="font-size:.8vw;font-weight:400"></div></div><div><div class="lab">Dist</div><div class="val" id="pDist"></div></div></div></div>
+<div id="dim"></div><div id="spot"></div>
 <button id="radarBtn" tabindex="0">RADAR OFF (R)</button>
 </div></div>
 <script>
@@ -51,10 +76,24 @@ let P;function initProj(c){const a=6378137,e=0.0818191908426,r=Math.PI/180;const
  const f1=c.lat1*r,f2=c.lat2*r,f0=c.lat0*r,n=(Math.log(m(f1))-Math.log(m(f2)))/(Math.log(t(f1))-Math.log(t(f2))),F=m(f1)/(n*t(f1)**n),r0=a*F*t(f0)**n;
  P={c,fwd(lat,lon){const rr=a*F*t(lat*r)**n,th=n*(lon-c.lon0)*r;return[rr*Math.sin(th),r0-rr*Math.cos(th)]},
  inv(x,y){const rp=Math.sign(n)*Math.hypot(x,r0-y),tp=(rp/(a*F))**(1/n),th=Math.atan2(x,r0-y);let f=Math.PI/2-2*Math.atan(tp);for(let i=0;i<4;i++)f=Math.PI/2-2*Math.atan(tp*((1-e*Math.sin(f))/(1+e*Math.sin(f)))**(e/2));return[f/r,th/n/r+c.lon0]}};}
-const px=(lat,lon)=>{const[x,y]=P.fwd(lat,lon),c=P.c;return[(x-c.xmin)/(c.xmax-c.xmin)*W,(c.ymax-y)/(c.ymax-c.ymin)*H]};
+let V=null;// visible window in chart-frame metres {x0,x1,y0,y1}
+const px=(lat,lon)=>{const[x,y]=P.fwd(lat,lon);return[(x-V.x0)/(V.x1-V.x0)*W,(V.y1-y)/(V.y1-V.y0)*H]};
 function size(){const w=$('wrap').getBoundingClientRect();DPR=Math.min(3,window.devicePixelRatio||1);W=Math.round(w.width*DPR);H=Math.round(w.height*DPR);for(const id of['base','radar','route','leds']){const c=$(id);c.width=W;c.height=H}drawBase();drawRadar();drawRoute();drawLeds()}
 let states=null,chartOK=false;
-function drawBase(){const g=$('base').getContext('2d');g.clearRect(0,0,W,H);if(chartOK||!states)return;// fallback if chart raster unavailable
+// ---- Deep-zoom FAA sectional tiles (public/tiles/L/row/col.webp, 512 px; level 0 = 3840 px wide frame) ----
+const TC=new Map();let fullImg=null,baseQ=0;
+function tileImg(l,x,y){const k=l+'/'+y+'/'+x;let t=TC.get(k);if(!t){const im=new Image();t={im,ok:false,bad:false};im.onload=()=>{t.ok=true;queueBase()};im.onerror=()=>{t.bad=true};im.src='/tiles/'+k+'.'+(P.c.tileExt||'webp');TC.set(k,t);if(TC.size>900){const it=TC.keys().next().value;TC.delete(it)}}return t}
+function queueBase(){if(!baseQ)baseQ=requestAnimationFrame(()=>{baseQ=0;drawBase()})}
+function drawBase(){const g=$('base').getContext('2d'),c=P.c;g.fillStyle='#e9e0c6';g.fillRect(0,0,W,H);
+ if(chartOK){const FW=c.xmax-c.xmin,FH=c.ymax-c.ymin;g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';
+  const iw=fullImg.naturalWidth,ih=fullImg.naturalHeight;g.drawImage(fullImg,(V.x0-c.xmin)/FW*iw,(c.ymax-V.y1)/FH*ih,(V.x1-V.x0)/FW*iw,(V.y1-V.y0)/FH*ih,0,0,W,H);
+  const need=W*FW/((V.x1-V.x0)*c.w);let L=Math.max(0,Math.min(c.maxLevel||0,Math.ceil(Math.log2(need)-0.15)));
+  if(c.maxLevel!=null&&(need>iw/c.w*1.05)&&tilesOK){const Wl=c.w*2**L,mpp=FW/Wl,T=c.tile,mt=mpp*T;
+   const tx0=Math.max(0,Math.floor((V.x0-c.xmin)/mt)),tx1=Math.floor((V.x1-c.xmin)/mt),ty0=Math.max(0,Math.floor((c.ymax-V.y1)/mt)),ty1=Math.floor((c.ymax-V.y0)/mt);
+   const sx=W/(V.x1-V.x0);for(let ty=ty0;ty<=ty1;ty++)for(let tx=tx0;tx<=tx1;tx++){const t=tileImg(L,tx,ty);if(!t.ok)continue;
+    const X=(c.xmin+tx*mt-V.x0)*sx,Y=(V.y1-(c.ymax-ty*mt))*sx;g.drawImage(t.im,Math.floor(X),Math.floor(Y),Math.ceil(mt*sx)+1,Math.ceil(mt*sx)+1)}}
+  return}
+ if(!states)return;// fallback if chart raster unavailable
  g.fillStyle='#e9e0c6';g.fillRect(0,0,W,H);g.strokeStyle='#7a6a55';g.lineWidth=1.2*DPR;g.beginPath();for(const f of states.features)for(const ln of f.geometry.coordinates){ln.forEach(([lo,la],i)=>{const[x,y]=px(la,lo);i?g.lineTo(x,y):g.moveTo(x,y)})}g.stroke()}
 // LED station selection: manned (non-AUTO) stations first, then grid-thinned to ~LED density
 function pick(list){if(all)return list;const keep=new Set(['KPAH','KMWA','KCGI','KEVV','KSTL','KBNA','KMEM','KSDF']);const cell=W/34;const occ=new Map(),out=[];
@@ -69,10 +108,10 @@ function drawLeds(){const g=$('leds').getContext('2d');g.clearRect(0,0,W,H);cons
   const gr=g.createRadialGradient(x,y,0,x,y,r*4.2);gr.addColorStop(0,c+'cc');gr.addColorStop(.35,c+'55');gr.addColorStop(1,c+'00');g.fillStyle=gr;g.beginPath();g.arc(x,y,r*4.2,0,7);g.fill();
   g.fillStyle=c;g.beginPath();g.arc(x,y,r*1.15,0,7);g.fill();g.fillStyle='rgba(255,255,255,.85)';g.beginPath();g.arc(x-r*.3,y-r*.3,r*.45,0,7);g.fill();}
  $('cnt').textContent=n+' stations'}
-function drawRadar(){const cv=$('radar'),g=cv.getContext('2d');g.clearRect(0,0,W,H);if(!radarOn||!radarImg)return;
+function drawRadar(){const cv=$('radar'),g=cv.getContext('2d');g.clearRect(0,0,W,H);if(!radarOn||!radarImg||anim)return;
  const s=document.createElement('canvas');s.width=radarImg.width;s.height=radarImg.height;const sg=s.getContext('2d');sg.drawImage(radarImg,0,0);const sd=sg.getImageData(0,0,s.width,s.height).data;
- const sc=2,w=Math.ceil(W/sc),h=Math.ceil(H/sc),out=g.createImageData(w,h),c=P.c,o=out.data;// bbox -127,22,-64,52
- for(let j=0;j<h;j++){const y=c.ymax-(j*sc/H)*(c.ymax-c.ymin);for(let i=0;i<w;i++){const x=c.xmin+(i*sc/W)*(c.xmax-c.xmin);const[la,lo]=P.inv(x,y);const u=Math.floor((lo+127)/63*s.width),v=Math.floor((52-la)/30*s.height);if(u<0||v<0||u>=s.width||v>=s.height)continue;const k=(v*s.width+u)*4,q=(j*w+i)*4;if(sd[k+3]<10)continue;o[q]=sd[k];o[q+1]=sd[k+1];o[q+2]=sd[k+2];o[q+3]=Math.min(200,sd[k+3])}}
+ const sc=2,w=Math.ceil(W/sc),h=Math.ceil(H/sc),out=g.createImageData(w,h),o=out.data;// bbox -127,22,-64,52
+ for(let j=0;j<h;j++){const y=V.y1-(j*sc/H)*(V.y1-V.y0);for(let i=0;i<w;i++){const x=V.x0+(i*sc/W)*(V.x1-V.x0);const[la,lo]=P.inv(x,y);const u=Math.floor((lo+127)/63*s.width),v=Math.floor((52-la)/30*s.height);if(u<0||v<0||u>=s.width||v>=s.height)continue;const k=(v*s.width+u)*4,q=(j*w+i)*4;if(sd[k+3]<10)continue;o[q]=sd[k];o[q+1]=sd[k+1];o[q+2]=sd[k+2];o[q+3]=Math.min(200,sd[k+3])}}
  const t=document.createElement('canvas');t.width=w;t.height=h;t.getContext('2d').putImageData(out,0,0);g.imageSmoothingEnabled=true;g.drawImage(t,0,0,W,H)}
 function loadRadar(){if(!radarOn)return;const im=new Image();im.onload=()=>{radarImg=im;radarT=new Date();$('rtime').textContent='Radar '+fmt(radarT);drawRadar()};im.src='/api/radar?t='+Date.now()}
 function setRadar(v){radarOn=v;localStorage.radar=v?'1':'0';$('radarBtn').textContent='RADAR '+(v?'ON':'OFF')+' (R)';$('radarBtn').classList.toggle('on',v);if(v&&!radarImg)loadRadar();if(!v)$('rtime').textContent='';drawRadar()}
@@ -90,13 +129,70 @@ let lastOk=0;async function loadMetars(){try{const j=await(await fetch('/api/met
 function tick(){$('clock').textContent='Updated '+(lastOk?fmt(lastOk):'—');if(lastOk&&Date.now()-lastOk>15*6e4)$('stale').style.display='inline'}
 document.addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(k==='r'||k==='enter'||k===' '||e.keyCode===403||e.keyCode===13){e.preventDefault();setRadar(!radarOn)}});
 $('radarBtn').onclick=()=>setRadar(!radarOn);
-(async()=>{const c=await(await fetch('/chart.json')).json();initProj(c);const big=Math.max(screen.width,screen.height)*(window.devicePixelRatio||1)>2200;
- await new Promise(ok=>{const im=new Image();im.onload=()=>{chartOK=true;$('wrap').style.backgroundImage=`url(${im.src})`;ok()};im.onerror=ok;im.src=big?'/chart.jpg':'/chart-1080.jpg'});
+(async()=>{const c=await(await fetch('/chart.json')).json();initProj(c);V=full();const big=Math.max(screen.width,screen.height)*(window.devicePixelRatio||1)>2200;
+ if(Q.get('lat')&&Q.get('lon')){const z=+Q.get('zoom')||8;V=viewAt(+Q.get('lat'),+Q.get('lon'),z)}
+ fetch('/tiles/0/0/0.webp',{method:'HEAD'}).then(r=>{tilesOK=r.ok;queueBase()}).catch(()=>{});
+ await new Promise(ok=>{const im=new Image();im.onload=()=>{chartOK=true;fullImg=im;ok()};im.onerror=ok;im.src=big?'/chart.jpg':'/chart-1080.jpg'});
  if(!chartOK)states=await(await fetch('/us-states.geojson')).json();
- size();addEventListener('resize',size);setRadar(radarOn);$('radarBtn').focus();
+ size();addEventListener('resize',size);setRadar(radarOn);$('radarBtn').focus();initZoom();
  await Promise.all([loadMetars(),loadPlan()]);tick();
- setInterval(loadMetars,5*6e4);setInterval(loadPlan,6e4);setInterval(()=>loadRadar(),5*6e4);setInterval(tick,15e3);
+ setInterval(loadMetars,5*6e4);setInterval(loadPlan,6e4);startCycle();setInterval(()=>loadRadar(),5*6e4);setInterval(tick,15e3);
  setInterval(()=>fetch('/api/ping',{cache:'no-store'}).catch(()=>{}),5*6e4);// keep-alive for Render free plan
  setTimeout(()=>location.reload(),6*36e5);// daily-ish hard refresh for kiosk memory hygiene
 })();
+
+// ---------- View / zoom (wheel, drag, pinch, +/-/0 keys; ?lat=&lon=&zoom=) ----------
+let tilesOK=false,anim=0,userT=0;
+function full(){const c=P.c;return{x0:c.xmin,x1:c.xmax,y0:c.ymin,y1:c.ymax}}
+function viewAt(lat,lon,z,fx=.5,fy=.5){const c=P.c,w=(c.xmax-c.xmin)/z,h=(c.ymax-c.ymin)/z,[x,y]=P.fwd(lat,lon);return clampV({x0:x-w*fx,x1:x+w*(1-fx),y1:y+h*fy,y0:y-h*(1-fy)})}
+function clampV(v){const c=P.c,w=Math.min(v.x1-v.x0,c.xmax-c.xmin),h=w*(c.ymax-c.ymin)/(c.xmax-c.xmin);let x0=Math.max(c.xmin,Math.min(v.x0,c.xmax-w)),y0=Math.max(c.ymin,Math.min(v.y0,c.ymax-h));return{x0,x1:x0+w,y0,y1:y0+h}}
+function redraw(){drawBase();drawRoute();drawLeds();if(!anim)drawRadar()}
+function setView(v,ms=0){v=clampV(v);cancelAnimationFrame(anim);if(!ms){anim=0;V=v;redraw();return}
+ const a=V,t0=performance.now(),lg=k=>Math.log(a.x1-a.x0)+(Math.log(v.x1-v.x0)-Math.log(a.x1-a.x0))*k;
+ const step=now=>{let k=Math.min(1,(now-t0)/ms);k=k<.5?2*k*k:1-(-2*k+2)**2/2;const w=Math.exp(lg(k)),h=w*(a.y1-a.y0)/(a.x1-a.x0);
+  const cx=(a.x0+a.x1)/2+((v.x0+v.x1)/2-(a.x0+a.x1)/2)*k,cy=(a.y0+a.y1)/2+((v.y0+v.y1)/2-(a.y0+a.y1)/2)*k;
+  V={x0:cx-w/2,x1:cx+w/2,y0:cy-h/2,y1:cy+h/2};if(k<1){anim=requestAnimationFrame(step);drawBase();drawRoute();drawLeds()}else{anim=0;V=v;redraw()}};anim=requestAnimationFrame(step)}
+function zoomBy(f,sx=.5,sy=.5){const w=V.x1-V.x0,h=V.y1-V.y0,mx=V.x0+w*sx,my=V.y1-h*sy,nw=Math.min(P.c.xmax-P.c.xmin,w/f),nh=nw*h/w;userT=Date.now();setView({x0:mx-nw*sx,x1:mx+nw*(1-sx),y1:my+nh*sy,y0:my-nh*(1-sy)})}
+function initZoom(){const el=$('wrap');document.body.style.cursor='default';
+ el.addEventListener('wheel',e=>{e.preventDefault();const r=el.getBoundingClientRect();zoomBy(Math.exp(-e.deltaY*.0018),(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height)},{passive:false});
+ const pts=new Map();let last=null;
+ el.addEventListener('pointerdown',e=>{pts.set(e.pointerId,[e.clientX,e.clientY]);el.setPointerCapture(e.pointerId)});
+ el.addEventListener('pointerup',e=>{pts.delete(e.pointerId);last=null});el.addEventListener('pointercancel',e=>{pts.delete(e.pointerId);last=null});
+ el.addEventListener('pointermove',e=>{if(!pts.has(e.pointerId))return;const r=el.getBoundingClientRect();const prev=pts.get(e.pointerId);pts.set(e.pointerId,[e.clientX,e.clientY]);userT=Date.now();
+  if(pts.size===1){const w=V.x1-V.x0,h=V.y1-V.y0,dx=(e.clientX-prev[0])/r.width*w,dy=(e.clientY-prev[1])/r.height*h;setView({x0:V.x0-dx,x1:V.x1-dx,y0:V.y0+dy,y1:V.y1+dy})}
+  else if(pts.size===2){const[p,q]=[...pts.values()],d=Math.hypot(p[0]-q[0],p[1]-q[1]);if(last)zoomBy(d/last,((p[0]+q[0])/2-r.left)/r.width,((p[1]+q[1])/2-r.top)/r.height);last=d}});
+ document.addEventListener('keydown',e=>{if(e.key==='+'||e.key==='='||e.keyCode===427)zoomBy(1.6);else if(e.key==='-'||e.keyCode===428)zoomBy(1/1.6);else if(e.key==='0'){userT=0;setView(full(),600)}});}
+// ---------- Airport Spotlight (only while a flight plan is loaded): map -> DEP -> map -> DEST, every ?cycle= s (default 10) ----------
+const CYC=Math.max(3,+(Q.get('cycle')||10))*1000,SP={},CATC={VFR:'#00a83a',MVFR:'#0a50ff',IFR:'#e00010',LIFR:'#c000c0'};let phase=0,cycT=null,spotOn=null;
+function startCycle(){clearInterval(cycT);cycT=setInterval(cycStep,CYC)}
+function cycStep(){if(!planData){if(spotOn)hideSpot();phase=0;return}if(Date.now()-userT<60e3)return;// pause after manual zoom/pan
+ phase=(phase+1)%4;if(phase===1)showSpot(planData.dep.id,'DEPARTURE');else if(phase===3)showSpot(planData.dest.id,'DESTINATION');else hideSpot()}
+function hideSpot(){spotOn=null;$('radarBtn').style.visibility='';$('spot').classList.remove('on');$('dim').classList.remove('on');setView(full(),1400)}
+const esc=t=>String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function spotData(id){const s=SP[id];if(s&&Date.now()-s.t<120e3)return s.d;const d=await(await fetch('/api/spot?id='+id)).json();SP[id]={t:Date.now(),d,apd:s?.apd,aer:s?.aer};
+ if(!SP[id].aer){const im=new Image();im.src=`/api/aerial?lat=${d.lat}&lon=${d.lon}&span=${spanFor(d)}`;SP[id].aer=im}
+ if(d.apd&&!SP[id].apd)SP[id].apd=renderApd(id);return d}
+function spanFor(d){const L=Math.max(3000,...(d.runways||[]).map(r=>+String(r.dimension).split('x')[0]||0));return Math.min(.05,Math.max(.012,L/364000*.85))}
+let pdfjs=null;async function renderApd(id){try{pdfjs=pdfjs||await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs');pdfjs.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs';
+ const doc=await pdfjs.getDocument('/api/apd?id='+id).promise,pg=await doc.getPage(1),vp=pg.getViewport({scale:3}),cv=document.createElement('canvas');cv.width=vp.width;cv.height=vp.height;
+ await pg.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise;return cv.toDataURL('image/png')}catch(e){console.warn('apd',e);return null}}
+const ft=m=>Math.round(m*3.28084);
+function decode(m){if(!m)return null;const wind=m.wspd===0?'Calm':(m.wdir==='VRB'?'VRB':String(m.wdir).padStart(3,'0')+'°')+' '+m.wspd+(m.wgst?'G'+m.wgst:'')+' kt';
+ const vis=(String(m.visib).replace('+','')==='10'?'10+':m.visib)+' SM';const cl=(m.clouds||[]);const ceil=cl.find(c=>/BKN|OVC|OVX/.test(c.cover));
+ const sky=cl.length?cl.map(c=>c.cover+(c.base!=null?String(Math.round(c.base/100)).padStart(3,'0'):'')).join(' '):(m.cover||'CLR');
+ const alt=m.altim?(m.altim*0.02953).toFixed(2)+' inHg':'—',cF=t=>t==null?'—':t.toFixed(0)+'°C';
+ return{wind,vis,ceil:ceil?ceil.base.toLocaleString()+' ft '+ceil.cover:'None',sky,td:cF(m.temp)+' / '+cF(m.dewp),alt,wx:m.wxString||'',obs:new Date(m.obsTime*1000)}}
+function tafLines(t){if(!t)return'';return t.rawTAF.replace(/\s+(FM\d{6}|TEMPO|BECMG|PROB\d{2})/g,'\n$1').split('\n').slice(0,6).join('\n')}
+async function showSpot(id,role){let d;try{d=await spotData(id)}catch{return}if(!planData)return;spotOn=id;const s=SP[id],m=decode(d.metar),cat=d.metar?.fltCat||'';
+ const apd=s.apd?await Promise.race([s.apd,new Promise(r=>setTimeout(()=>r(null),4000))]):null;if(spotOn!==id)return;
+ const aerCap='Aerial imagery: USGS National Map (NAIP orthoimagery)';
+ const aer=`<div class="img"><div class="lab2">Aerial View</div><div class="box"><img src="${s.aer.src}" style="width:100%;height:100%;object-fit:cover"></div><div class="cap">${aerCap}${apd?'':' · no FAA airport diagram published for '+esc(id)}</div></div>`;
+ const imgs=apd?`<div class="img"><div class="lab2">FAA Airport Diagram</div><div class="box" style="background:#fff"><img src="${apd}"></div><div class="cap">FAA d-TPP cycle ${esc(d.apd.cycle)} · ${esc(d.apd.pdf)} · not for navigation</div></div>`:aer;
+ const kv=(k,v)=>`<div class="kv"><span class="k">${k}</span><span class="v">${esc(v)}</span></div>`;
+ $('spot').innerHTML=`<div class="hd"><div class="sid">${esc(id)}</div><div><div class="snm">${esc(d.name.trim())}</div><div class="ssub">${role} · Elev ${esc(d.elev!=null?ft(d.elev)+' ft':'—')} · ${(d.runways||[]).map(r=>esc(r.id)).join('  ')}</div></div>${cat?`<div class="cat" style="background:${CATC[cat]||'#555'}">${cat}</div>`:''}</div>
+ <div class="bd"><div class="wx">${m?kv('Wind',m.wind)+kv('Visibility',m.vis)+kv('Ceiling',m.ceil)+kv('Sky',m.sky)+(m.wx?kv('Weather',m.wx):'')+kv('Temp / Dew',m.td)+kv('Altimeter',m.alt)+
+  `<div class="lab2">METAR · ${fmt(m.obs)}</div><div class="raw">${esc(d.metar.rawOb)}</div>`:'<div class="raw">No current METAR for '+esc(id)+'</div>'}
+  <div class="lab2">TAF ${d.taf?(d.tafNear?`· nearest: ${esc(d.taf.icaoId)} (${d.tafNear} NM) — none issued for ${esc(id)}`:''):''}</div><div class="raw">${d.taf?esc(tafLines(d.taf)):'No TAF within 40 NM'}</div>${apd?aer:''}</div>${imgs}</div>
+ <div class="phase">AIRPORT SPOTLIGHT · ${role==='DEPARTURE'?'1':'2'}/2</div>`;
+ $('spot').classList.add('on');$('dim').classList.add('on');$('radarBtn').style.visibility='hidden';setView(viewAt(d.lat,d.lon,14,.15,.42),1800)}
 </script></body></html>
