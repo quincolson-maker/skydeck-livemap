@@ -122,7 +122,12 @@ function drawRoute(){const g=$('route').getContext('2d');g.clearRect(0,0,W,H);if
  g.strokeStyle='#d4007a';g.lineWidth=W/600;g.stroke();
  g.font=`800 ${W/95}px Helvetica Neue,Arial`;planData.route.forEach((p,i)=>{const[x,y]=pts[i];const end=i==0||i==pts.length-1;g.fillStyle='#fff';g.strokeStyle='#d4007a';g.lineWidth=W/700;g.beginPath();g.arc(x,y,W/(end?260:420),0,7);g.fill();g.stroke();
   if(end){g.lineWidth=W/400;g.strokeStyle='#fff';g.strokeText(p.id,x+W/170,y-W/170);g.fillStyle='#111';g.fillText(p.id,x+W/170,y-W/170)}})}
-async function loadPlan(){try{const j=await(await fetch('/api/plan',{cache:'no-store'})).json();planData=j.plan;}catch{}const el=$('plan');
+let VER=null;async function loadPlan(){try{const j=await(await fetch('/api/plan',{cache:'no-store'})).json();
+ if(VER&&j.version&&j.version!==VER){location.reload();return}VER=VER||j.version;// new deploy -> reload so TVs pick up new code
+ let c=null;try{c=JSON.parse(localStorage.lmPlan||'null')}catch{}
+ if(j.plan){planData=j.plan;localStorage.lmPlan=JSON.stringify({plan:j.plan,boot:j.boot})}
+ else if(c&&c.boot!==j.boot&&c.plan.expires>Date.now())planData=c.plan;// server restarted (free plan wipes /tmp): keep showing the last plan
+ else{planData=null;if(c&&c.boot===j.boot)localStorage.removeItem('lmPlan')}}catch{}const el=$('plan');
  if(planData){el.style.display='block';$('pRoute').textContent=planData.dep.id+' → '+planData.dest.id;$('pDep').textContent=fmtD(planData.etd);$('pEta').textContent=fmtD(planData.eta);
   $('pVia').textContent=planData.route.map(p=>p.id).join(' ');$('pDist').textContent=planData.distNm+' NM';}else el.style.display='none';drawRoute()}
 let lastOk=0;async function loadMetars(){try{const j=await(await fetch('/api/metars',{cache:'no-store'})).json();stations=j.stations;lastOk=Date.now();$('stale').style.display='none';drawLeds()}catch{}}
@@ -158,14 +163,14 @@ function initZoom(){const el=$('wrap');document.body.style.cursor='default';
  const pts=new Map();let last=null;
  el.addEventListener('pointerdown',e=>{pts.set(e.pointerId,[e.clientX,e.clientY]);el.setPointerCapture(e.pointerId)});
  el.addEventListener('pointerup',e=>{pts.delete(e.pointerId);last=null});el.addEventListener('pointercancel',e=>{pts.delete(e.pointerId);last=null});
- el.addEventListener('pointermove',e=>{if(!pts.has(e.pointerId))return;const r=el.getBoundingClientRect();const prev=pts.get(e.pointerId);pts.set(e.pointerId,[e.clientX,e.clientY]);userT=Date.now();
-  if(pts.size===1){const w=V.x1-V.x0,h=V.y1-V.y0,dx=(e.clientX-prev[0])/r.width*w,dy=(e.clientY-prev[1])/r.height*h;setView({x0:V.x0-dx,x1:V.x1-dx,y0:V.y0+dy,y1:V.y1+dy})}
+ el.addEventListener('pointermove',e=>{if(!pts.has(e.pointerId))return;const r=el.getBoundingClientRect();const prev=pts.get(e.pointerId);pts.set(e.pointerId,[e.clientX,e.clientY]);
+  if(pts.size===1){if(Math.hypot(e.clientX-prev[0],e.clientY-prev[1])>12)userT=Date.now();const w=V.x1-V.x0,h=V.y1-V.y0,dx=(e.clientX-prev[0])/r.width*w,dy=(e.clientY-prev[1])/r.height*h;setView({x0:V.x0-dx,x1:V.x1-dx,y0:V.y0+dy,y1:V.y1+dy})}
   else if(pts.size===2){const[p,q]=[...pts.values()],d=Math.hypot(p[0]-q[0],p[1]-q[1]);if(last)zoomBy(d/last,((p[0]+q[0])/2-r.left)/r.width,((p[1]+q[1])/2-r.top)/r.height);last=d}});
  document.addEventListener('keydown',e=>{if(e.key==='+'||e.key==='='||e.keyCode===427)zoomBy(1.6);else if(e.key==='-'||e.keyCode===428)zoomBy(1/1.6);else if(e.key==='0'){userT=0;setView(full(),600)}});}
 // ---------- Airport Spotlight (only while a flight plan is loaded): map -> DEP -> map -> DEST, every ?cycle= s (default 10) ----------
 const CYC=Math.max(3,+(Q.get('cycle')||10))*1000,SP={},CATC={VFR:'#00a83a',MVFR:'#0a50ff',IFR:'#e00010',LIFR:'#c000c0'};let phase=0,cycT=null,spotOn=null;
 function startCycle(){clearInterval(cycT);cycT=setInterval(cycStep,CYC)}
-function cycStep(){if(!planData){if(spotOn)hideSpot();phase=0;return}if(Date.now()-userT<60e3)return;// pause after manual zoom/pan
+function cycStep(){if(!planData){if(spotOn)hideSpot();phase=0;return}if(Date.now()-userT<30e3)return;// pause after manual zoom/pan
  phase=(phase+1)%4;if(phase===1)showSpot(planData.dep.id,'DEPARTURE');else if(phase===3)showSpot(planData.dest.id,'DESTINATION');else hideSpot()}
 function hideSpot(){spotOn=null;$('radarBtn').style.visibility='';$('spot').classList.remove('on');$('dim').classList.remove('on');setView(full(),1400)}
 const esc=t=>String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));

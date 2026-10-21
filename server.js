@@ -126,6 +126,7 @@ async function spot(id) {
   let apd = null; try { const d = await dtppIndex(); if (d.idx[id]) apd = { cycle: d.cycle, pdf: d.idx[id], url: `https://aeronav.faa.gov/d-tpp/${d.cycle}/${d.idx[id]}` }; } catch {}
   return { id, name: a.name || m?.name || id, lat, lon, elev: a.elev ?? m?.elev, runways: a.runways || [], metar: m, taf, tafNear, apd };
 }
+const BOOT = Date.now().toString(36), VERSION = process.env.RENDER_GIT_COMMIT || BOOT;
 let plan = null; try { plan = JSON.parse(fs.readFileSync(PLAN_FILE, 'utf8')); } catch {}
 function currentPlan() { if (plan && Date.now() > plan.expires) { plan = null; try { fs.unlinkSync(PLAN_FILE); } catch {} } return plan; }
 function savePlan(p) { plan = p; fs.writeFileSync(PLAN_FILE, JSON.stringify(p)); }
@@ -160,7 +161,8 @@ const server = http.createServer(async (req, res) => {
       const url = `https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/export?bbox=${lo - dx},${la - sp},${lo + dx},${la + sp}&bboxSR=4326&imageSR=3857&size=1600,1200&format=jpg&f=image`;
       const b = await cached(url, 864e5, async () => { const r = await fetch(url, { headers: UA }); if (!r.ok) throw new Error('usgs ' + r.status); return Buffer.from(await r.arrayBuffer()); });
       res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' }); return res.end(b); }
-    if (p === '/api/plan' && req.method === 'GET') return json(res, 200, { plan: currentPlan() });
+    if (p === '/api/plan' && req.method === 'GET') return json(res, 200, { plan: currentPlan(), boot: BOOT, version: VERSION });
+    if (p === '/api/version') return json(res, 200, { version: VERSION, boot: BOOT });
     if (p === '/api/plan' && req.method === 'DELETE') { if (KEY && u.searchParams.get('key') !== KEY) return json(res, 403, { error: 'bad key' }); plan = null; try { fs.unlinkSync(PLAN_FILE); } catch {} return json(res, 200, { ok: true }); }
     if ((p === '/api/plan' || p === '/api/inbound') && req.method === 'POST') {
       if (KEY && u.searchParams.get('key') !== KEY) return json(res, 403, { error: 'bad key' });
