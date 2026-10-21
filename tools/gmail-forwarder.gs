@@ -4,20 +4,20 @@
  *  1. Open https://script.google.com, click New project, paste this file, and save.
  *  2. Set KEY below to the plan key (same as INBOUND_KEY on Render).
  *  3. Run "setup" once and approve the Gmail + external-request permissions.
- * Then email or forward any flight plan to  quin.colson+skydeck@gmail.com
+ * Then email or forward any flight plan to  quin.colson+livemapskydeck@gmail.com
  * Every 5 minutes this checks for new mail to that address, posts it to the map, and labels it.
  */
 const URL_ = 'https://skydeck-livemap.onrender.com/api/inbound';
 const KEY = 'PASTE_PLAN_KEY_HERE';
-const QUERY = 'to:quin.colson+skydeck@gmail.com -label:skydeck-done newer_than:2d';
+const QUERY = 'to:quin.colson+livemapskydeck@gmail.com -label:livemapskydeck-done newer_than:2d';
 function setup() {
   ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('relay').timeBased().everyMinutes(5).create();
-  GmailApp.getUserLabelByName('skydeck-done') || GmailApp.createLabel('skydeck-done');
+  GmailApp.getUserLabelByName('livemapskydeck-done') || GmailApp.createLabel('livemapskydeck-done');
   relay();
 }
 function relay() {
-  const done = GmailApp.getUserLabelByName('skydeck-done') || GmailApp.createLabel('skydeck-done');
+  const done = GmailApp.getUserLabelByName('livemapskydeck-done') || GmailApp.createLabel('livemapskydeck-done');
   GmailApp.search(QUERY, 0, 10).reverse().forEach(th => {
     const m = th.getMessages().pop();
     const r = UrlFetchApp.fetch(URL_ + '?key=' + encodeURIComponent(KEY), { method: 'post', contentType: 'application/json', muteHttpExceptions: true,
