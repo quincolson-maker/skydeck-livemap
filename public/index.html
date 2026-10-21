@@ -9,7 +9,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%}
 .card h3{margin:0 0 .35vw;font-size:.82vw;letter-spacing:.12em;text-transform:uppercase;border-bottom:.08vw solid #222;padding-bottom:.25vw}
 #legend{left:1.2%;bottom:2.2%;padding:.6vw .9vw;min-width:9vw}
 #legend .r{display:flex;align-items:center;gap:.6vw;margin:.18vw 0;font-weight:700}
-#legend .d{width:.9vw;height:.9vw;border-radius:50%}
+#legend .d{width:1.1vh;height:1.1vh;border-radius:50%;box-sizing:border-box;border:.16vh solid #111;flex:none}
 #legend .small{font-size:.68vw;font-weight:400;color:#444;margin-top:.35vw}
 #plan{left:calc(1.2% + 12.4vw);bottom:2.2%;padding:.6vw .9vw;min-width:15vw;display:none}
 #plan .big{font-size:1.6vw;font-weight:800;letter-spacing:.03em}
@@ -27,10 +27,10 @@ canvas{position:absolute;inset:0;width:100%;height:100%}
 <canvas id="base"></canvas><canvas id="radar"></canvas><canvas id="route"></canvas><canvas id="leds"></canvas>
 <div class="card" id="title">SKYDECK LIVE MAP <span id="clock">—</span> <span id="stale">STALE</span></div>
 <div class="card" id="legend"><h3>Flight Category</h3>
-<div class="r"><i class="d" style="background:#00e000;box-shadow:0 0 .5vw #00e000"></i>VFR</div>
-<div class="r"><i class="d" style="background:#2060ff;box-shadow:0 0 .5vw #2060ff"></i>MVFR</div>
-<div class="r"><i class="d" style="background:#ff1a1a;box-shadow:0 0 .5vw #ff1a1a"></i>IFR</div>
-<div class="r"><i class="d" style="background:#ff00ff;box-shadow:0 0 .5vw #ff00ff"></i>LIFR</div>
+<div class="r"><i class="d" data-c="VFR"></i>VFR</div>
+<div class="r"><i class="d" data-c="MVFR"></i>MVFR</div>
+<div class="r"><i class="d" data-c="IFR"></i>IFR</div>
+<div class="r"><i class="d" data-c="LIFR"></i>LIFR</div>
 <div class="small" id="cnt"></div><div class="small" id="rtime"></div></div>
 <div class="card" id="plan"><h3>Flight Plan</h3><div class="big" id="pRoute"></div>
 <div class="row" style="margin-top:.3vw"><div><div class="lab">Depart</div><div class="val" id="pDep"></div></div><div><div class="lab">Arrive (ETA)</div><div class="val" id="pEta"></div></div></div>
@@ -38,7 +38,10 @@ canvas{position:absolute;inset:0;width:100%;height:100%}
 <button id="radarBtn" tabindex="0">RADAR OFF (R)</button>
 </div></div>
 <script>
-const COL={VFR:'#00e000',MVFR:'#2060ff',IFR:'#ff1a1a',LIFR:'#ff00ff'};
+const LED=new URLSearchParams(location.search).get('style')==='led';
+// Sharp TV markers: standard aviation colors, slightly boosted saturation. ?style=led keeps the old glow look.
+const COL=LED?{VFR:'#00e000',MVFR:'#2060ff',IFR:'#ff1a1a',LIFR:'#ff00ff'}:{VFR:'#00c83c',MVFR:'#0a50ff',IFR:'#f00010',LIFR:'#e600e6'};
+document.querySelectorAll('#legend .d').forEach(e=>{const c=COL[e.dataset.c];e.style.background=c;if(LED){e.style.border='0';e.style.width=e.style.height='.9vw';e.style.boxShadow='0 0 .5vw '+c}});
 const Q=new URLSearchParams(location.search);
 let C,W,H,DPR,stations=[],planData=null,radarOn=Q.get('radar')==='1'||localStorage.radar==='1',radarImg=null,radarT=null;
 const all=Q.get('all')==='1';
@@ -49,7 +52,7 @@ let P;function initProj(c){const a=6378137,e=0.0818191908426,r=Math.PI/180;const
  P={c,fwd(lat,lon){const rr=a*F*t(lat*r)**n,th=n*(lon-c.lon0)*r;return[rr*Math.sin(th),r0-rr*Math.cos(th)]},
  inv(x,y){const rp=Math.sign(n)*Math.hypot(x,r0-y),tp=(rp/(a*F))**(1/n),th=Math.atan2(x,r0-y);let f=Math.PI/2-2*Math.atan(tp);for(let i=0;i<4;i++)f=Math.PI/2-2*Math.atan(tp*((1-e*Math.sin(f))/(1+e*Math.sin(f)))**(e/2));return[f/r,th/n/r+c.lon0]}};}
 const px=(lat,lon)=>{const[x,y]=P.fwd(lat,lon),c=P.c;return[(x-c.xmin)/(c.xmax-c.xmin)*W,(c.ymax-y)/(c.ymax-c.ymin)*H]};
-function size(){const w=$('wrap').getBoundingClientRect();DPR=Math.min(2,window.devicePixelRatio||1);W=Math.round(w.width*DPR);H=Math.round(w.height*DPR);for(const id of['base','radar','route','leds']){const c=$(id);c.width=W;c.height=H}drawBase();drawRadar();drawRoute();drawLeds()}
+function size(){const w=$('wrap').getBoundingClientRect();DPR=Math.min(3,window.devicePixelRatio||1);W=Math.round(w.width*DPR);H=Math.round(w.height*DPR);for(const id of['base','radar','route','leds']){const c=$(id);c.width=W;c.height=H}drawBase();drawRadar();drawRoute();drawLeds()}
 let states=null,chartOK=false;
 function drawBase(){const g=$('base').getContext('2d');g.clearRect(0,0,W,H);if(chartOK||!states)return;// fallback if chart raster unavailable
  g.fillStyle='#e9e0c6';g.fillRect(0,0,W,H);g.strokeStyle='#7a6a55';g.lineWidth=1.2*DPR;g.beginPath();for(const f of states.features)for(const ln of f.geometry.coordinates){ln.forEach(([lo,la],i)=>{const[x,y]=px(la,lo);i?g.lineTo(x,y):g.moveTo(x,y)})}g.stroke()}
@@ -58,7 +61,11 @@ function pick(list){if(all)return list;const keep=new Set(['KPAH','KMWA','KCGI',
  const sorted=list.filter(s=>/^K[A-Z]{3}$/.test(s[0])||keep.has(s[0])).sort((a,b)=>(keep.has(b[0])-keep.has(a[0]))||(b[4]-a[4]));
  for(const s of sorted){const[x,y]=px(s[1],s[2]);if(x<0||y<0||x>W||y>H)continue;const k=Math.floor(x/cell)+','+Math.floor(y/cell);if(occ.has(k)&&!keep.has(s[0]))continue;occ.set(k,1);out.push([s,x,y])}return out}
 function drawLeds(){const g=$('leds').getContext('2d');g.clearRect(0,0,W,H);const r=W/420;let n=0;
- for(const[s,x,y]of pick(stations).map(v=>Array.isArray(v[0])?v:[v,...px(v[1],v[2])])){const c=COL[s[3]];if(!c)continue;n++;
+ const list=pick(stations).map(v=>Array.isArray(v[0])?v:[v,...px(v[1],v[2])]);
+ if(!LED){// crisp flat markers: radius ~0.55% of viewport height, dark ring, no blur
+  const R=Math.max(3,H*0.0055),lw=Math.max(1,Math.round(R*0.32));g.lineWidth=lw;g.strokeStyle='rgba(17,17,17,.95)';
+  for(const[s,x,y]of list){const c=COL[s[3]];if(!c)continue;n++;g.fillStyle=c;g.beginPath();g.arc(x,y,R,0,Math.PI*2);g.fill();g.stroke();}
+ }else for(const[s,x,y]of list){const c=COL[s[3]];if(!c)continue;n++;
   const gr=g.createRadialGradient(x,y,0,x,y,r*4.2);gr.addColorStop(0,c+'cc');gr.addColorStop(.35,c+'55');gr.addColorStop(1,c+'00');g.fillStyle=gr;g.beginPath();g.arc(x,y,r*4.2,0,7);g.fill();
   g.fillStyle=c;g.beginPath();g.arc(x,y,r*1.15,0,7);g.fill();g.fillStyle='rgba(255,255,255,.85)';g.beginPath();g.arc(x-r*.3,y-r*.3,r*.45,0,7);g.fill();}
  $('cnt').textContent=n+' stations'}
