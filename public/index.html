@@ -26,7 +26,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%}
 .card{z-index:3}#radarBtn{z-index:3}
 #dim{z-index:2;position:absolute;inset:0;background:rgba(10,14,22,.5);opacity:0;transition:opacity .8s;pointer-events:none}
 #dim.on{opacity:1}
-#spot{z-index:4;position:absolute;left:36.5%;right:1.5%;top:3%;bottom:3%;background:#fff;border:.14vw solid #111;box-shadow:0 .5vw 2vw rgba(0,0,0,.45);opacity:0;transform:translateX(3%) scale(.98);transition:opacity .7s,transform .7s;display:flex;flex-direction:column;padding:1.2vw 1.4vw;box-sizing:border-box;color:#111;pointer-events:none}
+#spot{z-index:4;position:absolute;left:36.5%;right:1.5%;top:3%;bottom:3%;background:#fff;border:.14vw solid #111;box-shadow:0 .5vw 2vw rgba(0,0,0,.45);opacity:0;transform:translateX(3%) scale(.98);transition:opacity .6s ease,transform .6s ease;display:flex;flex-direction:column;padding:1.2vw 1.4vw;box-sizing:border-box;color:#111;pointer-events:none}
 #spot.on{opacity:1;transform:none}
 #spot .hd{display:flex;align-items:center;gap:1.2vw;border-bottom:.12vw solid #111;padding-bottom:.6vw;margin-bottom:.9vw}
 #spot .sid{font-size:3.6vw;font-weight:900;letter-spacing:.04em;line-height:1}
@@ -88,9 +88,9 @@ function drawBase(){const g=$('base').getContext('2d'),c=P.c;g.fillStyle='#e9e0c
  if(chartOK){const FW=c.xmax-c.xmin,FH=c.ymax-c.ymin;g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';
   const iw=fullImg.naturalWidth,ih=fullImg.naturalHeight;g.drawImage(fullImg,(V.x0-c.xmin)/FW*iw,(c.ymax-V.y1)/FH*ih,(V.x1-V.x0)/FW*iw,(V.y1-V.y0)/FH*ih,0,0,W,H);
   const need=W*FW/((V.x1-V.x0)*c.w);let L=Math.max(0,Math.min(c.maxLevel||0,Math.ceil(Math.log2(need)-0.15)));
-  if(c.maxLevel!=null&&(need>iw/c.w*1.05)&&tilesOK){const Wl=c.w*2**L,mpp=FW/Wl,T=c.tile,mt=mpp*T;
+  if(c.maxLevel!=null&&(need>iw/c.w*1.05)&&tilesOK)for(let l=Math.max(1,L-2);l<=L;l++){const isL=l===L,Wl=c.w*2**l,mpp=FW/Wl,T=c.tile,mt=mpp*T;
    const tx0=Math.max(0,Math.floor((V.x0-c.xmin)/mt)),tx1=Math.floor((V.x1-c.xmin)/mt),ty0=Math.max(0,Math.floor((c.ymax-V.y1)/mt)),ty1=Math.floor((c.ymax-V.y0)/mt);
-   const sx=W/(V.x1-V.x0);for(let ty=ty0;ty<=ty1;ty++)for(let tx=tx0;tx<=tx1;tx++){const t=tileImg(L,tx,ty);if(!t.ok)continue;
+   const sx=W/(V.x1-V.x0);for(let ty=ty0;ty<=ty1;ty++)for(let tx=tx0;tx<=tx1;tx++){const k=l+'/'+ty+'/'+tx;const t=isL?tileImg(l,tx,ty):TC.get(k);if(!t||!t.ok)continue;
     const X=(c.xmin+tx*mt-V.x0)*sx,Y=(V.y1-(c.ymax-ty*mt))*sx;g.drawImage(t.im,Math.floor(X),Math.floor(Y),Math.ceil(mt*sx)+1,Math.ceil(mt*sx)+1)}}
   return}
  if(!states)return;// fallback if chart raster unavailable
@@ -166,11 +166,20 @@ function full(){const c=P.c;return{x0:c.xmin,x1:c.xmax,y0:c.ymin,y1:c.ymax}}
 function viewAt(lat,lon,z,fx=.5,fy=.5){const c=P.c,w=(c.xmax-c.xmin)/z,h=(c.ymax-c.ymin)/z,[x,y]=P.fwd(lat,lon);return clampV({x0:x-w*fx,x1:x+w*(1-fx),y1:y+h*fy,y0:y-h*(1-fy)})}
 function clampV(v){const c=P.c,w=Math.min(v.x1-v.x0,c.xmax-c.xmin),h=w*(c.ymax-c.ymin)/(c.xmax-c.xmin);let x0=Math.max(c.xmin,Math.min(v.x0,c.xmax-w)),y0=Math.max(c.ymin,Math.min(v.y0,c.ymax-h));return{x0,x1:x0+w,y0,y1:y0+h}}
 function redraw(){drawBase();drawRadar();drawRoute();drawLeds();if(!anim)hiRadar()}
-function setView(v,ms=0){v=clampV(v);cancelAnimationFrame(anim);if(!ms){anim=0;V=v;redraw();return}
- const a=V,t0=performance.now(),lg=k=>Math.log(a.x1-a.x0)+(Math.log(v.x1-v.x0)-Math.log(a.x1-a.x0))*k;
- const step=now=>{let k=Math.min(1,(now-t0)/ms);k=k<.5?2*k*k:1-(-2*k+2)**2/2;const w=Math.exp(lg(k)),h=w*(a.y1-a.y0)/(a.x1-a.x0);
-  const cx=(a.x0+a.x1)/2+((v.x0+v.x1)/2-(a.x0+a.x1)/2)*k,cy=(a.y0+a.y1)/2+((v.y0+v.y1)/2-(a.y0+a.y1)/2)*k;
-  V={x0:cx-w/2,x1:cx+w/2,y0:cy-h/2,y1:cy+h/2};if(k<1){anim=requestAnimationFrame(step);drawBase();drawRadar();drawRoute();drawLeds()}else{anim=0;V=v;redraw()}};anim=requestAnimationFrame(step)}
+function setView(v,ms=0,arc=0){v=clampV(v);cancelAnimationFrame(anim);if(!ms){anim=0;V=v;redraw();return Promise.resolve()}
+ const a=V,t0=performance.now(),wa=a.x1-a.x0,wb=v.x1-v.x0,ax=(a.x0+a.x1)/2,ay=(a.y0+a.y1)/2,bx=(v.x0+v.x1)/2,by=(v.y0+v.y1)/2,asp=(a.y1-a.y0)/wa;
+ const dist=Math.hypot(bx-ax,by-ay),B=arc?Math.max(0,Math.log(Math.min(P.c.xmax-P.c.xmin,Math.max(wa,wb,dist*1.4))/Math.max(wa,wb))):0;// zoom-out bump for the arc
+ return new Promise(done=>{const step=now=>{const r=Math.min(1,(now-t0)/ms),k=r<.5?4*r*r*r:1-(-2*r+2)**3/2;// easeInOutCubic
+  const lw=Math.log(wa)+(Math.log(wb)-Math.log(wa))*k+B*Math.sin(Math.PI*k),w=Math.exp(lw),h=w*asp;
+  // move the centre proportionally to the log-zoom so the target stays put on screen as we dive in
+  const cx=ax+(bx-ax)*k,cy=ay+(by-ay)*k;V={x0:cx-w/2,x1:cx+w/2,y0:cy-h/2,y1:cy+h/2};
+  if(r<1){anim=requestAnimationFrame(step);drawBase();drawRadar();drawRoute();drawLeds()}else{anim=0;V=v;redraw();done()}};anim=requestAnimationFrame(step)})}
+function levelFor(v){const c=P.c,FW=c.xmax-c.xmin;return Math.max(0,Math.min(c.maxLevel||0,Math.ceil(Math.log2(W*FW/((v.x1-v.x0)*c.w))-0.15)))}
+function preload(v,ms=2500){if(!tilesOK)return Promise.resolve();v=clampV(v);const c=P.c,L=levelFor(v),mt=(c.xmax-c.xmin)/(c.w*2**L)*c.tile,ps=[];
+ for(const l of[L,Math.max(0,L-1),Math.max(0,L-2)]){const m=(c.xmax-c.xmin)/(c.w*2**l)*c.tile;
+  for(let ty=Math.max(0,Math.floor((c.ymax-v.y1)/m));ty<=Math.floor((c.ymax-v.y0)/m);ty++)for(let tx=Math.max(0,Math.floor((v.x0-c.xmin)/m));tx<=Math.floor((v.x1-c.xmin)/m);tx++){const t=tileImg(l,tx,ty);
+   if(!t.ok&&!t.bad)ps.push(new Promise(r=>{t.im.addEventListener('load',r,{once:true});t.im.addEventListener('error',r,{once:true})}))}}
+ return Promise.race([Promise.all(ps),new Promise(r=>setTimeout(r,ms))])}
 function zoomBy(f,sx=.5,sy=.5){const w=V.x1-V.x0,h=V.y1-V.y0,mx=V.x0+w*sx,my=V.y1-h*sy,nw=Math.min(P.c.xmax-P.c.xmin,w/f),nh=nw*h/w;userT=Date.now();setView({x0:mx-nw*sx,x1:mx+nw*(1-sx),y1:my+nh*sy,y0:my-nh*(1-sy)})}
 function initZoom(){const el=$('wrap');document.body.style.cursor='default';
  el.addEventListener('wheel',e=>{e.preventDefault();const r=el.getBoundingClientRect();zoomBy(Math.exp(-e.deltaY*.0018),(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height)},{passive:false});
@@ -182,11 +191,12 @@ function initZoom(){const el=$('wrap');document.body.style.cursor='default';
   else if(pts.size===2){const[p,q]=[...pts.values()],d=Math.hypot(p[0]-q[0],p[1]-q[1]);if(last)zoomBy(d/last,((p[0]+q[0])/2-r.left)/r.width,((p[1]+q[1])/2-r.top)/r.height);last=d}});
  document.addEventListener('keydown',e=>{if(e.key==='+'||e.key==='='||e.keyCode===427)zoomBy(1.6);else if(e.key==='-'||e.keyCode===428)zoomBy(1/1.6);else if(e.key==='0'){userT=0;setView(full(),600)}});}
 // ---------- Airport Spotlight (only while a flight plan is loaded): map -> DEP -> map -> DEST, every ?cycle= s (default 10) ----------
-const CYC=Math.max(3,+(Q.get('cycle')||10))*1000,SP={},CATC={VFR:'#00a83a',MVFR:'#0a50ff',IFR:'#e00010',LIFR:'#c000c0'};let phase=0,cycT=null,spotOn=null,tok=0;
+const CYC=Math.max(3,+(Q.get('cycle')||15))*1000,SP={},CATC={VFR:'#00a83a',MVFR:'#0a50ff',IFR:'#e00010',LIFR:'#c000c0'};let phase=0,cycT=null,spotOn=null,tok=0;
 function startCycle(){clearInterval(cycT);cycT=setInterval(cycStep,CYC)}
 function cycStep(){if(!planData){if(spotOn)hideSpot();phase=0;return}if(Date.now()-userT<30e3)return;// pause after manual zoom/pan
  phase=(phase+1)%4;tok++;if(phase===1)showSpot(planData.dep.id,'DEPARTURE');else if(phase===3)showSpot(planData.dest.id,'DESTINATION');else hideSpot()}
-function hideSpot(){spotOn=null;$('radarBtn').style.visibility='';$('spot').classList.remove('on');$('dim').classList.remove('on');setView(full(),1400)}
+const FLY=3000;function hideSpot(){const was=spotOn;spotOn=null;$('spot').classList.remove('on');// card fades out first, then fly back
+ if(!was){return}setTimeout(()=>{if(spotOn)return;$('dim').classList.remove('on');$('radarBtn').style.visibility='';preload(full(),800).then(()=>{if(!spotOn)setView(full(),FLY,1)})},700)}
 const esc=t=>String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 async function spotData(id){const s=SP[id];if(s&&Date.now()-s.t<120e3)return s.d;const d=await(await fetch('/api/spot?id='+id)).json();SP[id]={t:Date.now(),d,apd:s?.apd,aer:s?.aer};
  if(!SP[id].aer){const im=new Image();im.src=`/api/aerial?lat=${d.lat}&lon=${d.lon}&span=${spanFor(d)}`;SP[id].aer=im}
@@ -213,5 +223,6 @@ async function showSpot(id,role){const my=tok;let d;try{d=await spotData(id)}cat
   `<div class="lab2">METAR · ${fmt(m.obs)}</div><div class="raw">${esc(d.metar.rawOb)}</div>`:'<div class="raw">No current METAR for '+esc(id)+'</div>'}
   <div class="lab2">TAF ${d.taf?(d.tafNear?`· nearest: ${esc(d.taf.icaoId)} (${d.tafNear} NM) — none issued for ${esc(id)}`:''):''}</div><div class="raw">${d.taf?esc(tafLines(d.taf)):'No TAF within 40 NM'}</div>${apd?aer:''}</div>${imgs}</div>
  <div class="phase">AIRPORT SPOTLIGHT · ${role==='DEPARTURE'?'1':'2'}/2</div>`;
- $('spot').classList.add('on');$('dim').classList.add('on');$('radarBtn').style.visibility='hidden';setView(viewAt(d.lat,d.lon,14,.15,.42),1800)}
+ $('dim').classList.add('on');$('radarBtn').style.visibility='hidden';const tgt=viewAt(d.lat,d.lon,14,.15,.42);
+ await preload(tgt,2000);if(my!==tok)return;await setView(tgt,FLY,1);if(my!==tok)return;$('spot').classList.add('on')}
 </script></body></html>
