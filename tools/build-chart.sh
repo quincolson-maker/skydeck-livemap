@@ -8,6 +8,6 @@ case "$U" in http*) ;; *) U="";; esac
 [ -n "$U" ] || U="https://web.archive.org/web/20260329031553id_/https://aeronav.faa.gov/visual/03-19-2026/Planning/US_WallPlan.zip"
 echo "chart source: $U"
 mkdir -p /tmp/wp && curl -sSL --retry 4 -m 600 -o /tmp/wp/wp.zip "$U" && (cd /tmp/wp && python3 -m zipfile -e wp.zip . ) && ls -la /tmp/wp || { echo "chart download failed"; exit 0; }
-python3 -m pip install -q --user rasterio numpy pillow 2>&1 | tail -2 || { echo "pip failed"; exit 0; }
+python3 -m pip install -q rasterio numpy pillow 2>&1 | tail -2 || { echo "pip failed"; exit 0; }
 python3 tools/warp.py || echo "warp failed"
 exit 0
