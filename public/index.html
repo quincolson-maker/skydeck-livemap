@@ -54,7 +54,7 @@ let states=null,chartOK=false;
 function drawBase(){const g=$('base').getContext('2d');g.clearRect(0,0,W,H);if(chartOK||!states)return;// fallback if chart raster unavailable
  g.fillStyle='#e9e0c6';g.fillRect(0,0,W,H);g.strokeStyle='#7a6a55';g.lineWidth=1.2*DPR;g.beginPath();for(const f of states.features)for(const ln of f.geometry.coordinates){ln.forEach(([lo,la],i)=>{const[x,y]=px(la,lo);i?g.lineTo(x,y):g.moveTo(x,y)})}g.stroke()}
 // LED station selection: manned (non-AUTO) stations first, then grid-thinned to ~LED density
-function pick(list){if(all)return list;const keep=new Set(['KPAH','KMWA','KCGI','KEVV','KSTL','KBNA','KMEM','KSDF']);const cell=W/40;const occ=new Map(),out=[];
+function pick(list){if(all)return list;const keep=new Set(['KPAH','KMWA','KCGI','KEVV','KSTL','KBNA','KMEM','KSDF']);const cell=W/34;const occ=new Map(),out=[];
  const sorted=list.filter(s=>/^K[A-Z]{3}$/.test(s[0])||keep.has(s[0])).sort((a,b)=>(keep.has(b[0])-keep.has(a[0]))||(b[4]-a[4]));
  for(const s of sorted){const[x,y]=px(s[1],s[2]);if(x<0||y<0||x>W||y>H)continue;const k=Math.floor(x/cell)+','+Math.floor(y/cell);if(occ.has(k)&&!keep.has(s[0]))continue;occ.set(k,1);out.push([s,x,y])}return out}
 function drawLeds(){const g=$('leds').getContext('2d');g.clearRect(0,0,W,H);const r=W/420;let n=0;
