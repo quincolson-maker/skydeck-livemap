@@ -13,8 +13,8 @@
  "maxLevel": 4,
  "tileExt": "webp",
  "source": "FAA VFR Sectional Aeronautical Charts (GeoTIFF), aeronav.faa.gov",
- "edition": "09-03-2026",
- "sourceUrl": "https://aeronav.faa.gov/visual/09-03-2026/sectional-files/",
+ "edition": "10-29-2026",
+ "sourceUrl": "https://aeronav.faa.gov/visual/10-29-2026/sectional-files/",
  "nativeMetersPerPixel": 42.33,
  "maxMetersPerPixel": 77.2
 }
